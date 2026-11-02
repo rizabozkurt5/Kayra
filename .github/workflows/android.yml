@@ -1,35 +1,36 @@
+
 name: KAYRA Android APK
 
 on:
   workflow_dispatch:
-    push:
-        branches:
-              - main
+  push:
+    branches:
+      - main
 
-              jobs:
-                build:
-                    runs-on: ubuntu-latest
+jobs:
+  build:
+    runs-on: ubuntu-latest
 
-                        steps:
-                              - name: Kodu indir
-                                      uses: actions/checkout@v4
+    steps:
+      - name: Kodu indir
+        uses: actions/checkout@v4
 
-                                            - name: Java 17 kur
-                                                    uses: actions/setup-java@v4
-                                                            with:
-                                                                      distribution: temurin
-                                                                                java-version: 17
+      - name: Java 17 kur
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
 
-                                                                                      - name: Gradle 8.9 kur
-                                                                                              uses: gradle/actions/setup-gradle@v4
-                                                                                                      with:
-                                                                                                                gradle-version: '8.9'
+      - name: Gradle 8.9 kur
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
 
-                                                                                                                      - name: APK oluştur
-                                                                                                                              run: gradle assembleDebug
+      - name: APK oluştur
+        run: gradle assembleDebug
 
-                                                                                                                                    - name: APK dosyasını hazırla
-                                                                                                                                            uses: actions/upload-artifact@v4
-                                                                                                                                                    with:
-                                                                                                                                                              name: KAYRA-APK
-                                                                                                                                                                        path: app/build/outputs/apk/debug/app-debug.apk
+      - name: APK dosyasını hazırla
+        uses: actions/upload-artifact@v4
+        with:
+          name: KAYRA-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
