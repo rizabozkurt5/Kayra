@@ -16,7 +16,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Java 17 kur
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -28,6 +28,9 @@ jobs:
 
       - name: Projeyi kontrol et
         run: gradle projects
+
+      - name: Manifest hatasını incele
+        run: gradle :app:processDebugMainManifest --stacktrace
 
       - name: APK oluştur
         run: gradle :app:assembleDebug
