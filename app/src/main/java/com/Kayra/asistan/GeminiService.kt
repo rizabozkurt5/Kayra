@@ -42,12 +42,18 @@ object GeminiService {
                 connection.errorStream
             }
 
-            val response = stream.bufferedReader().use {
+            val response = stream?.bufferedReader()?.use {
                 it.readText()
-            }
+            } ?: ""
 
             if (code !in 200..299) {
-                return "Sunucu bağlantısında sorun oluştu."
+                val details = try {
+                    JSONObject(response).optString("details")
+                } catch (e: Exception) {
+                    response
+                }
+
+                return "HTTP $code: $details"
             }
 
             val json = JSONObject(response)
@@ -60,7 +66,7 @@ object GeminiService {
                 .getString("text")
 
         } catch (e: Exception) {
-            "Şu anda yapay zekâ sunucuma ulaşamıyorum."
+            "Bağlantı hatası: ${e.message}"
         } finally {
             connection?.disconnect()
         }
