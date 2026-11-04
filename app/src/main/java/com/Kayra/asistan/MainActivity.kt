@@ -96,16 +96,20 @@ class MainActivity : ComponentActivity() {
                     val command = words?.firstOrNull() ?: ""
                     recognizedText.value = command
 
-                    val answer = handleCommand(command)
-                    responseText.value = answer
-                    status.value = "SİSTEM HAZIR"
+                    if (command.isBlank()) {
+                        status.value = "KOMUT ALGILANAMADI"
+                        return
+                    }
 
-                    tts.speak(
-                        answer,
-                        TextToSpeech.QUEUE_FLUSH,
-                        null,
-                        "kayra_response"
-                    )
+                    val answer = handleCommand(command)
+
+                    if (answer != null) {
+                        responseText.value = answer
+                        status.value = "SİSTEM HAZIR"
+                        speak(answer)
+                    } else {
+                        askGemini(command)
+                    }
                 }
 
                 override fun onPartialResults(partialResults: Bundle?) {
@@ -175,7 +179,33 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun handleCommand(command: String): String {
+    private fun askGemini(command: String) {
+        status.value = "GEMINI'YE BAĞLANIYOR..."
+        responseText.value = "Düşünüyorum..."
+
+        Thread {
+            val answer = GeminiService.ask(command)
+
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+
+                responseText.value = answer
+                status.value = "SİSTEM HAZIR"
+                speak(answer)
+            }
+        }.start()
+    }
+
+    private fun speak(answer: String) {
+        tts.speak(
+            answer,
+            TextToSpeech.QUEUE_FLUSH,
+            null,
+            "kayra_response"
+        )
+    }
+
+    private fun handleCommand(command: String): String? {
         val text = command.lowercase(Locale("tr", "TR"))
 
         return when {
@@ -192,8 +222,7 @@ class MainActivity : ComponentActivity() {
             text.contains("nasılsın") ->
                 "Teşekkür ederim. Sistemlerim hazır ve seni dinliyorum."
 
-            else ->
-                "Komutunu aldım. Şu anda temel sürümdeyim. Yeni özelliklerim üzerinde çalışıyoruz."
+            else -> null
         }
     }
 
