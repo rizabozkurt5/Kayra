@@ -377,4 +377,3 @@ fun InfoPanel(title: String, value: String) {
         )
     }
 }
-
