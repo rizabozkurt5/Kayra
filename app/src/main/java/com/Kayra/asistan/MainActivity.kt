@@ -12,6 +12,7 @@ import android.speech.tts.TextToSpeech
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -23,6 +24,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -32,8 +34,10 @@ import java.util.Date
 import java.util.Locale
 
 private val Cyan = Color(0xFF00DFFF)
-private val Background = Color(0xFF050C16)
-private val Panel = Color(0xFF101D2B)
+private val Blue = Color(0xFF087BFF)
+private val Background = Color(0xFF030914)
+private val Panel = Color(0xFF0B1A2B)
+private val WhiteBlue = Color(0xFFB9F5FF)
 
 class MainActivity : ComponentActivity() {
 
@@ -248,124 +252,303 @@ fun KayraDashboard(
     responseText: String,
     onMicClick: () -> Unit
 ) {
+    val infiniteTransition = rememberInfiniteTransition(label = "kayra")
+
+    val rotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(12000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "rotation"
+    )
+
+    val reverseRotation by infiniteTransition.animateFloat(
+        initialValue = 360f,
+        targetValue = 0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(9000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "reverse"
+    )
+
+    val pulse by infiniteTransition.animateFloat(
+        initialValue = 0.88f,
+        targetValue = 1.08f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1600, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulse"
+    )
+
+    val bars = remember {
+        List(28) { Animatable(0.15f) }
+    }
+
+    LaunchedEffect(listening) {
+        if (listening) {
+            bars.forEachIndexed { index, bar ->
+                launch {
+                    while (true) {
+                        bar.animateTo(
+                            targetValue = (0.2f + (index % 6) * 0.13f),
+                            animationSpec = tween(
+                                durationMillis = 180 + index * 12
+                            )
+                        )
+                        bar.animateTo(
+                            targetValue = 0.12f,
+                            animationSpec = tween(220)
+                        )
+                    }
+                }
+            }
+        } else {
+            bars.forEach {
+                it.animateTo(0.12f, tween(300))
+            }
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Background)
-            .padding(20.dp),
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(35.dp))
 
         Text(
             "K A Y R A",
             color = Cyan,
-            fontSize = 30.sp,
-            fontWeight = FontWeight.Bold
+            fontSize = 32.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 5.sp
         )
 
         Text(
-            "PERSONAL AI ASSISTANT",
-            color = Color.Gray,
-            fontSize = 10.sp,
+            "ADVANCED PERSONAL AI SYSTEM",
+            color = WhiteBlue.copy(alpha = 0.65f),
+            fontSize = 9.sp,
             letterSpacing = 3.sp
         )
 
-        Spacer(Modifier.height(30.dp))
+        Spacer(Modifier.height(28.dp))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             StatusItem("SYSTEM", "ONLINE")
-            StatusItem("AI CORE", "READY")
+            StatusItem("AI CORE", "ACTIVE")
             StatusItem("VOICE", if (listening) "ACTIVE" else "STANDBY")
         }
 
-        Spacer(Modifier.height(45.dp))
+        Spacer(Modifier.height(30.dp))
 
         Box(
             modifier = Modifier
-                .size(250.dp)
+                .fillMaxWidth()
+                .height(300.dp)
                 .clickable { onMicClick() },
             contentAlignment = Alignment.Center
         ) {
             Canvas(Modifier.fillMaxSize()) {
+                val center = this.center
+                val radius = size.minDimension * 0.43f
+
                 drawCircle(
                     brush = Brush.radialGradient(
-                        listOf(
-                            Cyan.copy(alpha = 0.25f),
+                        colors = listOf(
+                            Cyan.copy(alpha = 0.18f),
+                            Blue.copy(alpha = 0.08f),
                             Color.Transparent
-                        )
+                        ),
+                        center = center,
+                        radius = radius * 1.5f
                     )
                 )
 
+                rotate(rotation, center) {
+                    drawCircle(
+                        color = Cyan.copy(alpha = 0.75f),
+                        radius = radius,
+                        style = Stroke(width = 2.dp.toPx())
+                    )
+
+                    for (i in 0 until 48) {
+                        rotate(i * 7.5f, center) {
+                            drawLine(
+                                color = Cyan.copy(
+                                    alpha = if (i % 4 == 0) 0.9f else 0.3f
+                                ),
+                                start = androidx.compose.ui.geometry.Offset(
+                                    center.x,
+                                    center.y - radius
+                                ),
+                                end = androidx.compose.ui.geometry.Offset(
+                                    center.x,
+                                    center.y - radius +
+                                        if (i % 4 == 0) 13.dp.toPx()
+                                        else 5.dp.toPx()
+                                ),
+                                strokeWidth = 2.dp.toPx()
+                            )
+                        }
+                    }
+
+                    drawArc(
+                        color = Cyan,
+                        startAngle = 0f,
+                        sweepAngle = 75f,
+                        useCenter = false,
+                        topLeft = androidx.compose.ui.geometry.Offset(
+                            center.x - radius - 8.dp.toPx(),
+                            center.y - radius - 8.dp.toPx()
+                        ),
+                        size = androidx.compose.ui.geometry.Size(
+                            (radius + 8.dp.toPx()) * 2,
+                            (radius + 8.dp.toPx()) * 2
+                        ),
+                        style = Stroke(4.dp.toPx())
+                    )
+                }
+
+                rotate(reverseRotation, center) {
+                    drawCircle(
+                        color = Blue.copy(alpha = 0.8f),
+                        radius = radius * 0.76f,
+                        style = Stroke(
+                            width = 2.dp.toPx(),
+                            pathEffect = PathEffect.dashPathEffect(
+                                floatArrayOf(12f, 10f)
+                            )
+                        )
+                    )
+                }
+
                 drawCircle(
-                    color = Cyan.copy(alpha = 0.45f),
-                    radius = size.minDimension * 0.46f,
-                    style = androidx.compose.ui.graphics.drawscope.Stroke(3.dp.toPx())
+                    color = Cyan.copy(alpha = 0.18f),
+                    radius = radius * 0.55f * pulse
                 )
 
                 drawCircle(
-                    color = Cyan.copy(alpha = 0.2f),
-                    radius = size.minDimension * 0.35f,
-                    style = androidx.compose.ui.graphics.drawscope.Stroke(1.dp.toPx())
+                    color = Cyan.copy(alpha = 0.9f),
+                    radius = radius * 0.48f,
+                    style = Stroke(2.dp.toPx())
                 )
             }
 
-            Box(
-                modifier = Modifier
-                    .size(125.dp)
-                    .background(Panel, CircleShape),
-                contentAlignment = Alignment.Center
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                Box(
+                    modifier = Modifier
+                        .size(125.dp)
+                        .background(
+                            Brush.radialGradient(
+                                listOf(
+                                    Color(0xFF174B75),
+                                    Color(0xFF09243F),
+                                    Background
+                                )
+                            ),
+                            CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "K",
+                        color = Cyan,
+                        fontSize = 66.sp,
+                        fontWeight = FontWeight.Light
+                    )
+                }
+
+                Spacer(Modifier.height(8.dp))
+
                 Text(
-                    if (listening) "DİNLEME" else "KAYRA",
+                    if (listening) "LISTENING" else "KAYRA CORE",
                     color = Cyan,
-                    fontSize = 19.sp,
-                    fontWeight = FontWeight.Bold
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 3.sp
+                )
+            }
+        }
+
+        Text(
+            status,
+            color = Cyan,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 2.sp
+        )
+
+        Spacer(Modifier.height(14.dp))
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(45.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            bars.forEach { bar ->
+                Box(
+                    modifier = Modifier
+                        .padding(horizontal = 2.dp)
+                        .width(4.dp)
+                        .fillMaxHeight(bar.value.coerceIn(0.1f, 1f))
+                        .background(Cyan, RoundedCornerShape(5.dp))
                 )
             }
         }
 
         Spacer(Modifier.height(20.dp))
 
-        Text(
-            status,
-            color = Cyan,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold
-        )
-
-        Spacer(Modifier.height(25.dp))
-
-        InfoPanel("SENİN SÖYLEDİĞİN", recognizedText)
+        InfoPanel("INPUT / SESLİ KOMUT", recognizedText)
 
         Spacer(Modifier.height(12.dp))
 
-        InfoPanel("KAYRA'NIN CEVABI", responseText)
+        InfoPanel("KAYRA / YANIT", responseText)
 
-        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.height(20.dp))
 
         Button(
             onClick = onMicClick,
             modifier = Modifier
                 .fillMaxWidth()
-                .height(58.dp),
-            shape = RoundedCornerShape(18.dp),
+                .height(60.dp),
+            shape = RoundedCornerShape(16.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = Cyan,
                 contentColor = Background
             )
         ) {
             Text(
-                if (listening) "DİNLENİYOR..." else "MİKROFONU AÇ",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold
+                if (listening) "DİNLENİYOR..." else "◉  KAYRA'YI ETKİNLEŞTİR",
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp
             )
         }
 
-        Spacer(Modifier.height(15.dp))
+        Spacer(Modifier.height(25.dp))
+
+        Text(
+            "KAYRA ARTIFICIAL INTELLIGENCE",
+            color = Color.Gray,
+            fontSize = 9.sp,
+            letterSpacing = 2.sp
+        )
+
+        Spacer(Modifier.height(20.dp))
     }
 }
 
@@ -374,11 +557,24 @@ fun StatusItem(title: String, value: String) {
     Column(
         modifier = Modifier
             .background(Panel, RoundedCornerShape(10.dp))
-            .padding(10.dp),
+            .padding(horizontal = 12.dp, vertical = 10.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(title, color = Color.Gray, fontSize = 9.sp)
-        Text(value, color = Cyan, fontSize = 11.sp)
+        Text(
+            title,
+            color = Color.Gray,
+            fontSize = 9.sp,
+            letterSpacing = 1.sp
+        )
+
+        Spacer(Modifier.height(4.dp))
+
+        Text(
+            value,
+            color = Cyan,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold
+        )
     }
 }
 
@@ -394,10 +590,11 @@ fun InfoPanel(title: String, value: String) {
             title,
             color = Cyan,
             fontSize = 10.sp,
-            fontWeight = FontWeight.Bold
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.sp
         )
 
-        Spacer(Modifier.height(7.dp))
+        Spacer(Modifier.height(8.dp))
 
         Text(
             value,
