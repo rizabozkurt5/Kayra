@@ -43,7 +43,61 @@ private val Panel = Color(0xFF0B1A2B)
 private val WhiteBlue = Color(0xFFB9F5FF)
 
 class MainActivity : ComponentActivity() {
+private val memoryPrefs by lazy {
+    getSharedPreferences("kayra_memory", MODE_PRIVATE)
+}
 
+private fun loadMemory(): org.json.JSONArray {
+    val saved = memoryPrefs.getString("conversation_history", "[]")
+
+    return try {
+        org.json.JSONArray(saved)
+    } catch (e: Exception) {
+        org.json.JSONArray()
+    }
+}
+
+private fun saveMemory(userMessage: String, kayraResponse: String) {
+    val history = loadMemory()
+
+    val conversation = org.json.JSONObject()
+        .put("user", userMessage)
+        .put("assistant", kayraResponse)
+        .put("time", System.currentTimeMillis())
+
+    history.put(conversation)
+
+    memoryPrefs.edit()
+        .putString("conversation_history", history.toString())
+        .apply()
+}
+
+private fun buildMemoryPrompt(message: String): String {
+    val history = loadMemory()
+    val context = StringBuilder()
+
+    val start = maxOf(0, history.length() - 10)
+
+    for (i in start until history.length()) {
+        val item = history.getJSONObject(i)
+
+        context.append("Kullanıcı: ")
+            .append(item.optString("user"))
+            .append("\nKayra: ")
+            .append(item.optString("assistant"))
+            .append("\n")
+    }
+
+    return """
+        Önceki konuşmalarımız:
+        $context
+
+        Yeni mesaj:
+        $message
+
+        Önceki konuşmaları dikkate alarak cevap ver.
+    """.trimIndent()
+}
     private lateinit var speechRecognizer: SpeechRecognizer
     private lateinit var tts: TextToSpeech
 
@@ -215,23 +269,24 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun askGemini(command: String) {
-        status.value = "GEMINI'YE BAĞLANIYOR..."
-        responseText.value = "Düşünüyorum..."
+    Thread {
+        val prompt = buildMemoryPrompt(command)
+        val answer = GeminiService.ask(prompt)
 
-        Thread {
-            val answer = GeminiService.ask(command)
+        runOnUiThread {
+            responseText = answer
 
-            runOnUiThread {
-                if (isFinishing || isDestroyed) {
-                    return@runOnUiThread
-                }
-
-                responseText.value = answer
-                status.value = "SİSTEM HAZIR"
-                speak(answer)
+            if (
+                !answer.startsWith("Bağlantı hatası:") &&
+                !answer.startsWith("HTTP ")
+            ) {
+                saveMemory(command, answer)
             }
-        }.start()
-    }
+
+            speak(answer)
+        }
+    }.start()
+}
 
     private fun speak(answer: String) {
         tts.speak(
