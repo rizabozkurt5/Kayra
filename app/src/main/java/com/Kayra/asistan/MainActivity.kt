@@ -13,18 +13,20 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.*
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -50,7 +52,9 @@ class MainActivity : ComponentActivity() {
     private var responseText = mutableStateOf("Komutunu bekliyorum.")
 
     private val permissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        registerForActivityResult(
+            ActivityResultContracts.RequestPermission()
+        ) { granted ->
             if (granted) {
                 startListening()
             } else {
@@ -68,66 +72,74 @@ class MainActivity : ComponentActivity() {
         }
 
         if (SpeechRecognizer.isRecognitionAvailable(this)) {
-            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
+            speechRecognizer =
+                SpeechRecognizer.createSpeechRecognizer(this)
 
-            speechRecognizer.setRecognitionListener(object : RecognitionListener {
+            speechRecognizer.setRecognitionListener(
+                object : RecognitionListener {
 
-                override fun onReadyForSpeech(params: Bundle?) {
-                    status.value = "DİNLİYOR..."
-                }
-
-                override fun onBeginningOfSpeech() {}
-                override fun onRmsChanged(rmsdB: Float) {}
-                override fun onBufferReceived(buffer: ByteArray?) {}
-
-                override fun onEndOfSpeech() {
-                    listening.value = false
-                    status.value = "KOMUT İŞLENİYOR"
-                }
-
-                override fun onError(error: Int) {
-                    listening.value = false
-                    status.value = "TEKRAR DENE"
-                }
-
-                override fun onResults(results: Bundle?) {
-                    listening.value = false
-
-                    val words = results?.getStringArrayList(
-                        SpeechRecognizer.RESULTS_RECOGNITION
-                    )
-
-                    val command = words?.firstOrNull() ?: ""
-                    recognizedText.value = command
-
-                    if (command.isBlank()) {
-                        status.value = "KOMUT ALGILANAMADI"
-                        return
+                    override fun onReadyForSpeech(params: Bundle?) {
+                        status.value = "DİNLİYOR..."
                     }
 
-                    val answer = handleCommand(command)
+                    override fun onBeginningOfSpeech() {}
+                    override fun onRmsChanged(rmsdB: Float) {}
+                    override fun onBufferReceived(buffer: ByteArray?) {}
 
-                    if (answer != null) {
-                        responseText.value = answer
-                        status.value = "SİSTEM HAZIR"
-                        speak(answer)
-                    } else {
-                        askGemini(command)
+                    override fun onEndOfSpeech() {
+                        listening.value = false
+                        status.value = "KOMUT İŞLENİYOR"
                     }
-                }
 
-                override fun onPartialResults(partialResults: Bundle?) {
-                    val words = partialResults?.getStringArrayList(
-                        SpeechRecognizer.RESULTS_RECOGNITION
-                    )
-
-                    if (!words.isNullOrEmpty()) {
-                        recognizedText.value = words[0]
+                    override fun onError(error: Int) {
+                        listening.value = false
+                        status.value = "TEKRAR DENE"
                     }
-                }
 
-                override fun onEvent(eventType: Int, params: Bundle?) {}
-            })
+                    override fun onResults(results: Bundle?) {
+                        listening.value = false
+
+                        val words = results?.getStringArrayList(
+                            SpeechRecognizer.RESULTS_RECOGNITION
+                        )
+
+                        val command = words?.firstOrNull() ?: ""
+                        recognizedText.value = command
+
+                        if (command.isBlank()) {
+                            status.value = "KOMUT ALGILANAMADI"
+                            return
+                        }
+
+                        val answer = handleCommand(command)
+
+                        if (answer != null) {
+                            responseText.value = answer
+                            status.value = "SİSTEM HAZIR"
+                            speak(answer)
+                        } else {
+                            askGemini(command)
+                        }
+                    }
+
+                    override fun onPartialResults(
+                        partialResults: Bundle?
+                    ) {
+                        val words = partialResults?.getStringArrayList(
+                            SpeechRecognizer.RESULTS_RECOGNITION
+                        )
+
+                        if (!words.isNullOrEmpty()) {
+                            recognizedText.value = words[0]
+                        }
+                    }
+
+                    override fun onEvent(
+                        eventType: Int,
+                        params: Bundle?
+                    ) {}
+                }
+            )
         } else {
             status.value = "SES TANIMA DESTEKLENMİYOR"
         }
@@ -149,12 +161,15 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        if (ContextCompat.checkSelfPermission(
+        if (
+            ContextCompat.checkSelfPermission(
                 this,
                 Manifest.permission.RECORD_AUDIO
             ) != PackageManager.PERMISSION_GRANTED
         ) {
-            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            permissionLauncher.launch(
+                Manifest.permission.RECORD_AUDIO
+            )
         } else {
             startListening()
         }
@@ -162,13 +177,21 @@ class MainActivity : ComponentActivity() {
 
     private fun startListening() {
         try {
-            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            val intent = Intent(
+                RecognizerIntent.ACTION_RECOGNIZE_SPEECH
+            ).apply {
                 putExtra(
                     RecognizerIntent.EXTRA_LANGUAGE_MODEL,
                     RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
                 )
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE, "tr-TR")
-                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                putExtra(
+                    RecognizerIntent.EXTRA_LANGUAGE,
+                    "tr-TR"
+                )
+                putExtra(
+                    RecognizerIntent.EXTRA_PARTIAL_RESULTS,
+                    true
+                )
             }
 
             listening.value = true
@@ -191,7 +214,9 @@ class MainActivity : ComponentActivity() {
             val answer = GeminiService.ask(command)
 
             runOnUiThread {
-                if (isFinishing || isDestroyed) return@runOnUiThread
+                if (isFinishing || isDestroyed) {
+                    return@runOnUiThread
+                }
 
                 responseText.value = answer
                 status.value = "SİSTEM HAZIR"
@@ -213,15 +238,20 @@ class MainActivity : ComponentActivity() {
         val text = command.lowercase(Locale("tr", "TR"))
 
         return when {
-            text.contains("merhaba") || text.contains("selam") ->
+            text.contains("merhaba") ||
+                    text.contains("selam") ->
                 "Merhaba! Ben Kayra. Sana nasıl yardımcı olabilirim?"
 
-            text.contains("adın") || text.contains("kimsin") ->
+            text.contains("adın") ||
+                    text.contains("kimsin") ->
                 "Ben Kayra, kişisel yapay zeka asistanınım."
 
             text.contains("saat kaç") ->
                 "Şu an saat " +
-                    SimpleDateFormat("HH:mm", Locale("tr", "TR")).format(Date())
+                        SimpleDateFormat(
+                            "HH:mm",
+                            Locale("tr", "TR")
+                        ).format(Date())
 
             text.contains("nasılsın") ->
                 "Teşekkür ederim. Sistemlerim hazır ve seni dinliyorum."
@@ -252,14 +282,17 @@ fun KayraDashboard(
     responseText: String,
     onMicClick: () -> Unit
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "kayra")
+    val infiniteTransition =
+        rememberInfiniteTransition(label = "kayra")
 
     val rotation by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(
-            animation = tween(12000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
+            animation = tween(
+                durationMillis = 12000,
+                easing = LinearEasing
+            )
         ),
         label = "rotation"
     )
@@ -268,8 +301,10 @@ fun KayraDashboard(
         initialValue = 360f,
         targetValue = 0f,
         animationSpec = infiniteRepeatable(
-            animation = tween(9000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
+            animation = tween(
+                durationMillis = 9000,
+                easing = LinearEasing
+            )
         ),
         label = "reverse"
     )
@@ -278,40 +313,27 @@ fun KayraDashboard(
         initialValue = 0.88f,
         targetValue = 1.08f,
         animationSpec = infiniteRepeatable(
-            animation = tween(1600, easing = FastOutSlowInEasing),
+            animation = tween(
+                durationMillis = 1600,
+                easing = FastOutSlowInEasing
+            ),
             repeatMode = RepeatMode.Reverse
         ),
         label = "pulse"
     )
 
-    val bars = remember {
-        List(28) { Animatable(0.15f) }
-    }
-
-    LaunchedEffect(listening) {
-        if (listening) {
-            bars.forEachIndexed { index, bar ->
-                launch {
-                    while (true) {
-                        bar.animateTo(
-                            targetValue = (0.2f + (index % 6) * 0.13f),
-                            animationSpec = tween(
-                                durationMillis = 180 + index * 12
-                            )
-                        )
-                        bar.animateTo(
-                            targetValue = 0.12f,
-                            animationSpec = tween(220)
-                        )
-                    }
-                }
-            }
-        } else {
-            bars.forEach {
-                it.animateTo(0.12f, tween(300))
-            }
-        }
-    }
+    val wave by infiniteTransition.animateFloat(
+        initialValue = 0.15f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(
+                durationMillis = 500,
+                easing = FastOutSlowInEasing
+            ),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "wave"
+    )
 
     Column(
         modifier = Modifier
@@ -321,6 +343,7 @@ fun KayraDashboard(
             .padding(horizontal = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+
         Spacer(Modifier.height(35.dp))
 
         Text(
@@ -346,7 +369,10 @@ fun KayraDashboard(
         ) {
             StatusItem("SYSTEM", "ONLINE")
             StatusItem("AI CORE", "ACTIVE")
-            StatusItem("VOICE", if (listening) "ACTIVE" else "STANDBY")
+            StatusItem(
+                "VOICE",
+                if (listening) "ACTIVE" else "STANDBY"
+            )
         }
 
         Spacer(Modifier.height(30.dp))
@@ -358,8 +384,13 @@ fun KayraDashboard(
                 .clickable { onMicClick() },
             contentAlignment = Alignment.Center
         ) {
+
             Canvas(Modifier.fillMaxSize()) {
-                val center = this.center
+                val center = androidx.compose.ui.geometry.Offset(
+                    size.width / 2f,
+                    size.height / 2f
+                )
+
                 val radius = size.minDimension * 0.43f
 
                 drawCircle(
@@ -394,8 +425,11 @@ fun KayraDashboard(
                                 end = androidx.compose.ui.geometry.Offset(
                                     center.x,
                                     center.y - radius +
-                                        if (i % 4 == 0) 13.dp.toPx()
-                                        else 5.dp.toPx()
+                                            if (i % 4 == 0) {
+                                                13.dp.toPx()
+                                            } else {
+                                                5.dp.toPx()
+                                            }
                                 ),
                                 strokeWidth = 2.dp.toPx()
                             )
@@ -492,31 +526,59 @@ fun KayraDashboard(
 
         Spacer(Modifier.height(14.dp))
 
-        Row(
+        Canvas(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(45.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
+                .height(45.dp)
         ) {
-            bars.forEach { bar ->
-                Box(
-                    modifier = Modifier
-                        .padding(horizontal = 2.dp)
-                        .width(4.dp)
-                        .fillMaxHeight(bar.value.coerceIn(0.1f, 1f))
-                        .background(Cyan, RoundedCornerShape(5.dp))
+            val barCount = 28
+            val barWidth = 4.dp.toPx()
+            val gap = 4.dp.toPx()
+            val totalWidth = barCount * (barWidth + gap)
+            val startX = (size.width - totalWidth) / 2f
+
+            for (i in 0 until barCount) {
+                val factor = if (listening) {
+                    0.2f + ((i * 7) % 10) / 10f * wave
+                } else {
+                    0.12f
+                }
+
+                val barHeight = size.height * factor
+
+                val x = startX + i * (barWidth + gap)
+
+                drawLine(
+                    color = Cyan.copy(
+                        alpha = if (listening) 0.9f else 0.35f
+                    ),
+                    start = androidx.compose.ui.geometry.Offset(
+                        x,
+                        (size.height - barHeight) / 2f
+                    ),
+                    end = androidx.compose.ui.geometry.Offset(
+                        x,
+                        (size.height + barHeight) / 2f
+                    ),
+                    strokeWidth = barWidth,
+                    cap = androidx.compose.ui.graphics.StrokeCap.Round
                 )
             }
         }
 
         Spacer(Modifier.height(20.dp))
 
-        InfoPanel("INPUT / SESLİ KOMUT", recognizedText)
+        InfoPanel(
+            "INPUT / SESLİ KOMUT",
+            recognizedText
+        )
 
         Spacer(Modifier.height(12.dp))
 
-        InfoPanel("KAYRA / YANIT", responseText)
+        InfoPanel(
+            "KAYRA / YANIT",
+            responseText
+        )
 
         Spacer(Modifier.height(20.dp))
 
@@ -532,7 +594,8 @@ fun KayraDashboard(
             )
         ) {
             Text(
-                if (listening) "DİNLENİYOR..." else "◉  KAYRA'YI ETKİNLEŞTİR",
+                if (listening) "DİNLENİYOR..."
+                else "◉  KAYRA'YI ETKİNLEŞTİR",
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.sp
@@ -556,8 +619,14 @@ fun KayraDashboard(
 fun StatusItem(title: String, value: String) {
     Column(
         modifier = Modifier
-            .background(Panel, RoundedCornerShape(10.dp))
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .background(
+                Panel,
+                RoundedCornerShape(10.dp)
+            )
+            .padding(
+                horizontal = 12.dp,
+                vertical = 10.dp
+            ),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
@@ -579,27 +648,4 @@ fun StatusItem(title: String, value: String) {
 }
 
 @Composable
-fun InfoPanel(title: String, value: String) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Panel, RoundedCornerShape(14.dp))
-            .padding(15.dp)
-    ) {
-        Text(
-            title,
-            color = Cyan,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.sp
-        )
-
-        Spacer(Modifier.height(8.dp))
-
-        Text(
-            value,
-            color = Color.White,
-            fontSize = 14.sp
-        )
-    }
-}
+fun InfoPanel(title: Str
