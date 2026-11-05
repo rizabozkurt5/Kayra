@@ -84,7 +84,9 @@ class MainActivity : ComponentActivity() {
                     }
 
                     override fun onBeginningOfSpeech() {}
+
                     override fun onRmsChanged(rmsdB: Float) {}
+
                     override fun onBufferReceived(buffer: ByteArray?) {}
 
                     override fun onEndOfSpeech() {
@@ -561,7 +563,7 @@ fun KayraDashboard(
                         (size.height + barHeight) / 2f
                     ),
                     strokeWidth = barWidth,
-                    cap = androidx.compose.ui.graphics.StrokeCap.Round
+                    cap = StrokeCap.Round
                 )
             }
         }
@@ -597,7 +599,25 @@ fun KayraDashboard(
                 if (listening) "DİNLENİYOR..."
                 else "◉  KAYRA'YI ETKİNLEŞTİR",
                 fontSize = 15.sp,
-                @Composable
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp
+            )
+        }
+
+        Spacer(Modifier.height(25.dp))
+
+        Text(
+            "KAYRA ARTIFICIAL INTELLIGENCE",
+            color = Color.Gray,
+            fontSize = 9.sp,
+            letterSpacing = 2.sp
+        )
+
+        Spacer(Modifier.height(20.dp))
+    }
+}
+
+@Composable
 fun StatusItem(title: String, value: String) {
     Column(
         modifier = Modifier
@@ -630,29 +650,4 @@ fun StatusItem(title: String, value: String) {
 }
 
 @Composable
-fun InfoPanel(title: String, value: String) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                Panel,
-                RoundedCornerShape(14.dp)
-            )
-            .padding(16.dp)
-    ) {
-        Text(
-            title,
-            color = Cyan,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold
-        )
-
-        Spacer(Modifier.height(8.dp))
-
-        Text(
-            value,
-            color = WhiteBlue,
-            fontSize = 14.sp
-        )
-    }
-}
+fun InfoPa
