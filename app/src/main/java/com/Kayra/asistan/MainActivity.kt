@@ -13,6 +13,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -545,7 +546,6 @@ fun KayraDashboard(
                 }
 
                 val barHeight = size.height * factor
-
                 val x = startX + i * (barWidth + gap)
 
                 drawLine(
@@ -644,8 +644,4 @@ fun StatusItem(title: String, value: String) {
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold
         )
-    }
-}
-
-@Composable
-fun InfoPanel(title: Str
+    
