@@ -70,21 +70,10 @@ class MainActivity : ComponentActivity() {
     if (result == TextToSpeech.SUCCESS) {
 
         val turkish = Locale("tr", "TR")
-        val voices = tts.voices
 
-        val maleVoice = voices?.firstOrNull {
-            it.locale.language == "tr" &&
-            it.name.contains("male", ignoreCase = true)
-        }
-
-        if (maleVoice != null) {
-            tts.voice = maleVoice
-        } else {
-            tts.language = turkish
-        }
-
+        tts.language = turkish
         tts.setSpeechRate(0.92f)
-        tts.setPitch(0.85f)
+        tts.setPitch(1.0f)
     }
 }
 
