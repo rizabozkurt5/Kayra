@@ -650,4 +650,29 @@ fun StatusItem(title: String, value: String) {
 }
 
 @Composable
-fun InfoPa
+fun InfoPanel(title: String, value: String) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                Panel,
+                RoundedCornerShape(14.dp)
+            )
+            .padding(16.dp)
+    ) {
+        Text(
+            text = title,
+            color = Cyan,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        Text(
+            text = value,
+            color = WhiteBlue,
+            fontSize = 14.sp
+        )
+    }
+}
