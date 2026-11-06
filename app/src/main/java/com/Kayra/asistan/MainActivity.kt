@@ -87,6 +87,69 @@ private fun buildMemoryPrompt(message: String): String {
             .append(item.optString("assistant"))
             .append("\n")
     }
+    private fun saveFact(fact: String) {
+    val cleanFact = fact.trim()
+    if (cleanFact.isBlank()) return
+
+    val facts = loadFacts()
+
+    val exists = (0 until facts.length()).any {
+        facts.optString(it).equals(cleanFact, ignoreCase = true)
+    }
+
+    if (!exists) {
+        facts.put(cleanFact)
+        memoryPrefs.edit()
+            .putString("saved_facts", facts.toString())
+            .apply()
+    }
+    }
+    private fun loadFacts(): org.json.JSONArray {
+    val saved = memoryPrefs.getString("saved_facts", "[]")
+
+    return try {
+        org.json.JSONArray(saved)
+    } catch (e: Exception) {
+        org.json.JSONArray()
+    }
+    }
+    private fun getSavedFacts(): String {
+    val facts = loadFacts()
+    val result = StringBuilder()
+
+    for (i in 0 until facts.length()) {
+        result.append("- ")
+            .append(facts.optString(i))
+            .append("\n")
+    }
+
+    return result.toString()
+    }
+    private fun forgetFact(query: String): Boolean {
+    if (query.isBlank()) return false
+
+    val facts = loadFacts()
+    val updated = org.json.JSONArray()
+    var removed = false
+
+    for (i in 0 until facts.length()) {
+        val fact = facts.optString(i)
+
+        if (fact.contains(query, ignoreCase = true)) {
+            removed = true
+        } else {
+            updated.put(fact)
+        }
+    }
+
+    if (removed) {
+        memoryPrefs.edit()
+            .putString("saved_facts", updated.toString())
+            .apply()
+    }
+
+    return removed
+    }
 
     return """
         Sen KAYRA isimli kişisel asistansın.
