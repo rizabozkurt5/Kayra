@@ -274,7 +274,7 @@ private fun buildMemoryPrompt(message: String): String {
         val answer = GeminiService.ask(prompt)
 
         runOnUiThread {
-            responseText = answer
+            responseText.value = answer
 
             if (
                 !answer.startsWith("Bağlantı hatası:") &&
