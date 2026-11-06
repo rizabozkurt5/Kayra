@@ -11,10 +11,8 @@ import android.speech.tts.TextToSpeech
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -24,783 +22,394 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.*
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import org.json.JSONArray
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private val Cyan = Color(0xFF00DFFF)
-private val Blue = Color(0xFF087BFF)
-private val Background = Color(0xFF030914)
-private val Panel = Color(0xFF0B1A2B)
-private val WhiteBlue = Color(0xFFB9F5FF)
+private val Background = Color(0xFF050B16)
+private val Panel = Color(0xFF0D1B2E)
+private val Cyan = Color(0xFF39D9FF)
+private val WhiteBlue = Color(0xFFD9F5FF)
 
-class MainActivity : ComponentActivity() {
-private val memoryPrefs by lazy {
-    getSharedPreferences("kayra_memory", MODE_PRIVATE)
-}
+class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
-private fun loadMemory(): org.json.JSONArray {
-    val saved = memoryPrefs.getString("conversation_history", "[]")
+    private var speechRecognizer: SpeechRecognizer? = null
+    private var textToSpeech: TextToSpeech? = null
+    private var ttsReady = false
 
-    return try {
-        org.json.JSONArray(saved)
-    } catch (e: Exception) {
-        org.json.JSONArray()
-    }
-}
+    private var recognizedText by mutableStateOf("Seni dinlemeye hazırım.")
+    private var responseText by mutableStateOf("Merhaba. Ben KAYRA. Nasıl yardımcı olabilirim?")
+    private var listening by mutableStateOf(false)
+    private var thinking by mutableStateOf(false)
+    private var wakeEnabled by mutableStateOf(false)
 
-private fun saveMemory(userMessage: String, kayraResponse: String) {
-    val history = loadMemory()
-
-    val conversation = org.json.JSONObject()
-        .put("user", userMessage)
-        .put("assistant", kayraResponse)
-        .put("time", System.currentTimeMillis())
-
-    history.put(conversation)
-
-    memoryPrefs.edit()
-        .putString("conversation_history", history.toString())
-        .apply()
-}
-
-private fun buildMemoryPrompt(message: String): String {
-    val history = loadMemory()
-    val context = StringBuilder()
-
-    val start = maxOf(0, history.length() - 10)
-
-    for (i in start until history.length()) {
-        val item = history.getJSONObject(i)
-
-        context.append("Kullanıcı: ")
-            .append(item.optString("user"))
-            .append("\nKayra: ")
-            .append(item.optString("assistant"))
-            .append("\n")
-    }
-    private fun saveFact(fact: String) {
-    val cleanFact = fact.trim()
-    if (cleanFact.isBlank()) return
-
-    val facts = loadFacts()
-
-    val exists = (0 until facts.length()).any {
-        facts.optString(it).equals(cleanFact, ignoreCase = true)
-    }
-
-    if (!exists) {
-        facts.put(cleanFact)
-        memoryPrefs.edit()
-            .putString("saved_facts", facts.toString())
-            .apply()
-    }
-    }
-    private fun loadFacts(): org.json.JSONArray {
-    val saved = memoryPrefs.getString("saved_facts", "[]")
-
-    return try {
-        org.json.JSONArray(saved)
-    } catch (e: Exception) {
-        org.json.JSONArray()
-    }
-    }
-    private fun getSavedFacts(): String {
-    val facts = loadFacts()
-    val result = StringBuilder()
-
-    for (i in 0 until facts.length()) {
-        result.append("- ")
-            .append(facts.optString(i))
-            .append("\n")
-    }
-
-    return result.toString()
-    }
-    private fun forgetFact(query: String): Boolean {
-    if (query.isBlank()) return false
-
-    val facts = loadFacts()
-    val updated = org.json.JSONArray()
-    var removed = false
-
-    for (i in 0 until facts.length()) {
-        val fact = facts.optString(i)
-
-        if (fact.contains(query, ignoreCase = true)) {
-            removed = true
-        } else {
-            updated.put(fact)
+    private val wakePermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) startWakeService()
+        else {
+            responseText = "Hey Kayra için mikrofon izni gerekiyor."
+            speak(responseText)
         }
     }
 
-    if (removed) {
-        memoryPrefs.edit()
-            .putString("saved_facts", updated.toString())
-            .apply()
+    private val permissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) startListening() else speak("Mikrofon izni olmadan seni dinleyemem.")
     }
-
-    return removed
-    }
-
-    return """
-        Sen KAYRA isimli kişisel asistansın.
-
-        Kullanıcı hakkında kalıcı hafızanda bulunan bilgiler:
-        ${getSavedFacts()}
-
-        Önceki konuşmalarımız:
-        $context
-
-        Yeni mesaj:
-        $message
-
-        Hafızandaki bilgileri gerektiğinde kullan.
-        Bilmediğin şeyleri uydurma.
-    """.trimIndent()
-}
-    private lateinit var speechRecognizer: SpeechRecognizer
-    private lateinit var tts: TextToSpeech
-
-    private var listening = mutableStateOf(false)
-    private var status = mutableStateOf("SİSTEM HAZIR")
-    private var recognizedText = mutableStateOf("Merhaba, ben Kayra.")
-    private var responseText = mutableStateOf("Komutunu bekliyorum.")
-
-    private val permissionLauncher =
-        registerForActivityResult(
-            ActivityResultContracts.RequestPermission()
-        ) { granted ->
-            if (granted) {
-                startListening()
-            } else {
-                status.value = "MİKROFON İZNİ GEREKLİ"
-            }
-        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        tts = TextToSpeech(this) { result ->
-    if (result == TextToSpeech.SUCCESS) {
-
-        val turkish = Locale("tr", "TR")
-
-        tts.language = turkish
-        tts.setSpeechRate(0.92f)
-        tts.setPitch(1.0f)
-    }
-}
-
-        if (SpeechRecognizer.isRecognitionAvailable(this)) {
-            speechRecognizer =
-                SpeechRecognizer.createSpeechRecognizer(this)
-
-            speechRecognizer.setRecognitionListener(
-                object : RecognitionListener {
-
-                    override fun onReadyForSpeech(params: Bundle?) {
-                        status.value = "DİNLİYOR..."
-                    }
-
-                    override fun onBeginningOfSpeech() {}
-
-                    override fun onRmsChanged(rmsdB: Float) {}
-
-                    override fun onBufferReceived(buffer: ByteArray?) {}
-
-                    override fun onEndOfSpeech() {
-                        listening.value = false
-                        status.value = "KOMUT İŞLENİYOR"
-                    }
-
-                    override fun onError(error: Int) {
-                        listening.value = false
-                        status.value = "TEKRAR DENE"
-                    }
-
-                    override fun onResults(results: Bundle?) {
-                        listening.value = false
-
-                        val words = results?.getStringArrayList(
-                            SpeechRecognizer.RESULTS_RECOGNITION
-                        )
-
-                        val command = words?.firstOrNull() ?: ""
-                        recognizedText.value = command
-
-                        if (command.isBlank()) {
-                            status.value = "KOMUT ALGILANAMADI"
-                            return
-                        }
-
-                        val answer = handleCommand(command)
-
-                        if (answer != null) {
-                            responseText.value = answer
-                            status.value = "SİSTEM HAZIR"
-                            speak(answer)
-                        } else {
-                            askGemini(command)
-                        }
-                    }
-
-                    override fun onPartialResults(
-                        partialResults: Bundle?
-                    ) {
-                        val words = partialResults?.getStringArrayList(
-                            SpeechRecognizer.RESULTS_RECOGNITION
-                        )
-
-                        if (!words.isNullOrEmpty()) {
-                            recognizedText.value = words[0]
-                        }
-                    }
-
-                    override fun onEvent(
-                        eventType: Int,
-                        params: Bundle?
-                    ) {}
-                }
-            )
-        } else {
-            status.value = "SES TANIMA DESTEKLENMİYOR"
-        }
-
+        textToSpeech = TextToSpeech(this, this)
         setContent {
-            KayraDashboard(
-                status = status.value,
-                listening = listening.value,
-                recognizedText = recognizedText.value,
-                responseText = responseText.value,
-                onMicClick = { onMicClick() }
+            KayraScreen(
+                recognizedText = recognizedText,
+                responseText = responseText,
+                listening = listening,
+                thinking = thinking,
+                wakeEnabled = wakeEnabled,
+                onMicClick = { checkPermissionAndListen() },
+                onWakeClick = { toggleWakeService() }
             )
         }
     }
 
-    private fun onMicClick() {
-        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
-            status.value = "SES TANIMA KULLANILAMIYOR"
+    override fun onInit(status: Int) {
+        if (status == TextToSpeech.SUCCESS) {
+            val result = textToSpeech?.setLanguage(Locale("tr", "TR"))
+            ttsReady = result != TextToSpeech.LANG_MISSING_DATA &&
+                result != TextToSpeech.LANG_NOT_SUPPORTED
+            textToSpeech?.setSpeechRate(0.92f)
+        }
+    }
+
+    private fun toggleWakeService() {
+        if (wakeEnabled) {
+            stopService(Intent(this, KayraWakeService::class.java).setAction(KayraWakeService.ACTION_STOP))
+            wakeEnabled = false
+            responseText = "Hey Kayra bekleme modu kapatıldı."
+            speak(responseText)
             return
         }
-
-        if (
-            ContextCompat.checkSelfPermission(
-                this,
-                Manifest.permission.RECORD_AUDIO
-            ) != PackageManager.PERMISSION_GRANTED
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+            == PackageManager.PERMISSION_GRANTED
         ) {
-            permissionLauncher.launch(
-                Manifest.permission.RECORD_AUDIO
-            )
+            startWakeService()
         } else {
-            startListening()
+            wakePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
+    }
+
+    private fun startWakeService() {
+        try {
+            speechRecognizer?.cancel()
+            listening = false
+            val serviceIntent = Intent(this, KayraWakeService::class.java)
+            ContextCompat.startForegroundService(this, serviceIntent)
+            wakeEnabled = true
+            responseText = "Hey Kayra bekleme modu başlatıldı. Ekran kapalıyken de deneyebilirsin."
+            speak(responseText)
+        } catch (e: Exception) {
+            wakeEnabled = false
+            responseText = "Uyandırma servisi başlatılamadı: ${e.localizedMessage ?: "bilinmeyen hata"}"
+            speak(responseText)
+        }
+    }
+
+    private fun checkPermissionAndListen() {
+        if (listening) {
+            speechRecognizer?.cancel()
+            listening = false
+            return
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+            == PackageManager.PERMISSION_GRANTED
+        ) startListening() else permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
     }
 
     private fun startListening() {
+        if (!SpeechRecognizer.isRecognitionAvailable(this)) {
+            responseText = "Bu telefonda konuşma tanıma hizmeti bulunamadı."
+            speak(responseText)
+            return
+        }
+        if (speechRecognizer == null) speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this)
+        speechRecognizer?.setRecognitionListener(object : RecognitionListener {
+            override fun onReadyForSpeech(params: Bundle?) { listening = true }
+            override fun onBeginningOfSpeech() { listening = true }
+            override fun onRmsChanged(rmsdB: Float) {}
+            override fun onBufferReceived(buffer: ByteArray?) {}
+            override fun onEndOfSpeech() { listening = false }
+            override fun onError(error: Int) {
+                listening = false
+                if (error != SpeechRecognizer.ERROR_NO_MATCH && error != SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
+                    responseText = "Sesi algılayamadım. Tekrar deneyebilirsin."
+                }
+            }
+            override fun onResults(results: Bundle?) {
+                listening = false
+                val words = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                val command = words?.firstOrNull().orEmpty()
+                if (command.isNotBlank()) {
+                    recognizedText = command
+                    handleCommand(command)
+                } else {
+                    responseText = "Seni duyamadım, tekrar deneyebilir misin?"
+                }
+            }
+            override fun onPartialResults(partialResults: Bundle?) {}
+            override fun onEvent(eventType: Int, params: Bundle?) {}
+        })
+
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "tr-TR")
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "tr-TR")
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+        }
+        listening = true
         try {
-            val intent = Intent(
-                RecognizerIntent.ACTION_RECOGNIZE_SPEECH
-            ).apply {
-                putExtra(
-                    RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
-                )
-                putExtra(
-                    RecognizerIntent.EXTRA_LANGUAGE,
-                    "tr-TR"
-                )
-                putExtra(
-                    RecognizerIntent.EXTRA_PARTIAL_RESULTS,
-                    true
-                )
-            }
-
-            listening.value = true
-            status.value = "BAĞLANIYOR..."
-            recognizedText.value = "Seni dinliyorum..."
-
-            speechRecognizer.startListening(intent)
-
-        } catch (e: Exception) {
-            listening.value = false
-            status.value = "BAŞLATMA HATASI"
+            speechRecognizer?.startListening(intent)
+        } catch (_: Exception) {
+            listening = false
+            responseText = "Mikrofon başlatılamadı. Tekrar dene."
         }
     }
 
-    private fun askGemini(command: String) {
-    Thread {
-        val prompt = buildMemoryPrompt(command)
-        val answer = GeminiService.ask(prompt)
+    private fun handleCommand(rawCommand: String) {
+        val command = rawCommand.trim()
+        val normalized = command.lowercase(Locale("tr", "TR"))
 
-        runOnUiThread {
-            responseText.value = answer
-
-            if (
-                !answer.startsWith("Bağlantı hatası:") &&
-                !answer.startsWith("HTTP ")
-            ) {
-                saveMemory(command, answer)
+        when {
+            normalized.contains("hatırla") -> {
+                val fact = memoryText(command, "hatırla")
+                if (fact.isBlank()) answer("Neyi hatırlamamı istersin? Örneğin: En sevdiğim renk mavi, hatırla.")
+                else {
+                    saveFact(fact)
+                    answer("Tamam, bunu hafızama kaydettim: $fact")
+                }
             }
-
-            speak(answer)
+            normalized.contains("unut") -> {
+                val query = memoryText(command, "unut")
+                if (query.isBlank()) answer("Unutmamı istediğin bilgiyi de söyle.")
+                else {
+                    val removed = forgetFact(query)
+                    answer(if (removed) "Tamam, eşleşen bilgiyi hafızamdan çıkardım." else "Bu ifadeyle eşleşen bir kayıt bulamadım.")
+                }
+            }
+            normalized.contains("hafızanda ne var") || normalized.contains("neleri hatırlıyorsun") || normalized.contains("benim hakkımda ne biliyorsun") -> {
+                val facts = getSavedFacts()
+                answer(if (facts.isEmpty()) "Henüz kaydettiğim bir bilgi yok. Bana bir şey söyleyip hatırlamamı isteyebilirsin." else "Hafızamda şunlar var: ${facts.joinToString(". ")}")
+            }
+            normalized.contains("saat kaç") -> answer("Saat şu an ${SimpleDateFormat("HH:mm", Locale("tr", "TR")).format(Date())}.")
+            normalized == "merhaba" || normalized.startsWith("merhaba kayra") || normalized == "selam" -> answer("Merhaba. Buradayım, nasıl yardımcı olayım?")
+            normalized.contains("nasılsın") -> answer("Sistemlerim çalışıyor. Sana yardımcı olmaya hazırım.")
+            else -> askAI(command)
         }
-    }.start()
-}
-
-    private fun speak(answer: String) {
-        tts.speak(
-            answer,
-            TextToSpeech.QUEUE_FLUSH,
-            null,
-            "kayra_response"
-        )
     }
 
-    private fun handleCommand(command: String): String? {
-        val text = command.lowercase(Locale("tr", "TR"))
+    private fun memoryText(text: String, keyword: String): String {
+        val index = text.indexOf(keyword, ignoreCase = true)
+        if (index < 0) return ""
+        val after = text.substring(index + keyword.length).trim(' ', ':', ',', '.', '-')
+        if (after.isNotBlank()) return after
+        return text.substring(0, index)
+            .replace(Regex("(?i)^kayra[,: ]*"), "")
+            .trim(' ', ':', ',', '.', '-')
+    }
 
-        return when {
-            text.contains("merhaba") ||
-                    text.contains("selam") ->
-                "Merhaba! Ben Kayra. Sana nasıl yardımcı olabilirim?"
-
-            text.contains("adın") ||
-                    text.contains("kimsin") ->
-                "Ben Kayra, kişisel yapay zeka asistanınım."
-
-            text.contains("saat kaç") ->
-                "Şu an saat " +
-                        SimpleDateFormat(
-                            "HH:mm",
-                            Locale("tr", "TR")
-                        ).format(Date())
-
-            text.contains("nasılsın") ->
-                "Teşekkür ederim. Sistemlerim hazır ve seni dinliyorum."
-
-            else -> null
+    private fun askAI(command: String) {
+        thinking = true
+        responseText = "Düşünüyorum..."
+        val facts = getSavedFacts()
+        val history = getHistory()
+        val prompt = buildString {
+            append("Sen KAYRA adında Türkçe konuşan, doğal, yardımsever ve Jarvis tarzında bir kişisel asistansın. ")
+            append("Kullanıcıya samimi ve kısa cevaplar ver. Bilmediğin şeyi uydurma. Telefonunda doğrudan yapamadığın işlemleri yaptığını söyleme.\n")
+            if (facts.isNotEmpty()) append("Kullanıcının özellikle hatırlamamı istediği bilgiler: ${facts.joinToString("; ")}\n")
+            if (history.isNotEmpty()) append("Son konuşmalar:\n$history\n")
+            append("Kullanıcı: $command\nKAYRA:")
         }
+        Thread {
+            val result = GeminiService.ask(prompt)
+            runOnUiThread {
+                thinking = false
+                responseText = result
+                addHistory(command, result)
+                speak(result)
+            }
+        }.start()
+    }
+
+    private fun answer(text: String) {
+        responseText = text
+        addHistory(recognizedText, text)
+        speak(text)
+    }
+
+    private fun speak(text: String) {
+        if (ttsReady) textToSpeech?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "KAYRA_REPLY")
+    }
+
+    private fun preferences() = getSharedPreferences("kayra_data", MODE_PRIVATE)
+
+    private fun saveFact(fact: String) {
+        val facts = getSavedFacts().toMutableList()
+        if (facts.none { it.equals(fact, ignoreCase = true) }) facts.add(fact)
+        preferences().edit().putString("facts", JSONArray(facts).toString()).apply()
+    }
+
+    private fun getSavedFacts(): List<String> = try {
+        val array = JSONArray(preferences().getString("facts", "[]"))
+        (0 until array.length()).mapNotNull { array.optString(it).takeIf(String::isNotBlank) }
+    } catch (_: Exception) { emptyList() }
+
+    private fun forgetFact(query: String): Boolean {
+        val facts = getSavedFacts()
+        val updated = facts.filterNot { it.contains(query, ignoreCase = true) }
+        if (updated.size == facts.size) return false
+        preferences().edit().putString("facts", JSONArray(updated).toString()).apply()
+        return true
+    }
+
+    private fun getHistory(): String = try {
+        val array = JSONArray(preferences().getString("history", "[]"))
+        val start = (array.length() - 10).coerceAtLeast(0)
+        (start until array.length()).joinToString("\n") { i ->
+            val item = array.getJSONObject(i)
+            "Kullanıcı: ${item.optString("user")}\nKAYRA: ${item.optString("assistant")}"
+        }
+    } catch (_: Exception) { "" }
+
+    private fun addHistory(user: String, assistant: String) {
+        try {
+            val array = JSONArray(preferences().getString("history", "[]"))
+            array.put(org.json.JSONObject().put("user", user).put("assistant", assistant))
+            while (array.length() > 50) array.remove(0)
+            preferences().edit().putString("history", array.toString()).apply()
+        } catch (_: Exception) { }
     }
 
     override fun onDestroy() {
-        if (::speechRecognizer.isInitialized) {
-            speechRecognizer.destroy()
-        }
-
-        if (::tts.isInitialized) {
-            tts.stop()
-            tts.shutdown()
-        }
-
+        speechRecognizer?.destroy()
+        speechRecognizer = null
+        textToSpeech?.stop()
+        textToSpeech?.shutdown()
         super.onDestroy()
     }
 }
 
 @Composable
-fun KayraDashboard(
-    status: String,
-    listening: Boolean,
+private fun KayraScreen(
     recognizedText: String,
     responseText: String,
-    onMicClick: () -> Unit
+    listening: Boolean,
+    thinking: Boolean,
+    wakeEnabled: Boolean,
+    onMicClick: () -> Unit,
+    onWakeClick: () -> Unit
 ) {
-    val infiniteTransition =
-        rememberInfiniteTransition(label = "kayra")
-
-    val rotation by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(
-                durationMillis = 12000,
-                easing = LinearEasing
-            )
-        ),
-        label = "rotation"
-    )
-
-    val reverseRotation by infiniteTransition.animateFloat(
-        initialValue = 360f,
-        targetValue = 0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(
-                durationMillis = 9000,
-                easing = LinearEasing
-            )
-        ),
-        label = "reverse"
-    )
-
-    val pulse by infiniteTransition.animateFloat(
-        initialValue = 0.88f,
-        targetValue = 1.08f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(
-                durationMillis = 1600,
-                easing = FastOutSlowInEasing
-            ),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulse"
-    )
-
-    val wave by infiniteTransition.animateFloat(
-        initialValue = 0.15f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(
-                durationMillis = 500,
-                easing = FastOutSlowInEasing
-            ),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "wave"
-    )
-
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Background)
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-
-        Spacer(Modifier.height(35.dp))
-
-        Text(
-            "K A Y R A",
-            color = Cyan,
-            fontSize = 32.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 5.sp
-        )
-
-        Text(
-            "ADVANCED PERSONAL AI SYSTEM",
-            color = WhiteBlue.copy(alpha = 0.65f),
-            fontSize = 9.sp,
-            letterSpacing = 3.sp
-        )
-
-        Spacer(Modifier.height(28.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            StatusItem("SYSTEM", "ONLINE")
-            StatusItem("AI CORE", "ACTIVE")
-            StatusItem(
-                "VOICE",
-                if (listening) "ACTIVE" else "STANDBY"
-            )
-        }
-
-        Spacer(Modifier.height(30.dp))
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(300.dp)
-                .clickable { onMicClick() },
-            contentAlignment = Alignment.Center
-        ) {
-
-            Canvas(Modifier.fillMaxSize()) {
-                val center = androidx.compose.ui.geometry.Offset(
-                    size.width / 2f,
-                    size.height / 2f
-                )
-
-                val radius = size.minDimension * 0.43f
-
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(
-                            Cyan.copy(alpha = 0.18f),
-                            Blue.copy(alpha = 0.08f),
-                            Color.Transparent
-                        ),
-                        center = center,
-                        radius = radius * 1.5f
-                    )
-                )
-
-                rotate(rotation, center) {
-                    drawCircle(
-                        color = Cyan.copy(alpha = 0.75f),
-                        radius = radius,
-                        style = Stroke(width = 2.dp.toPx())
-                    )
-
-                    for (i in 0 until 48) {
-                        rotate(i * 7.5f, center) {
-                            drawLine(
-                                color = Cyan.copy(
-                                    alpha = if (i % 4 == 0) 0.9f else 0.3f
-                                ),
-                                start = androidx.compose.ui.geometry.Offset(
-                                    center.x,
-                                    center.y - radius
-                                ),
-                                end = androidx.compose.ui.geometry.Offset(
-                                    center.x,
-                                    center.y - radius +
-                                            if (i % 4 == 0) {
-                                                13.dp.toPx()
-                                            } else {
-                                                5.dp.toPx()
-                                            }
-                                ),
-                                strokeWidth = 2.dp.toPx()
-                            )
-                        }
-                    }
-
-                    drawArc(
-                        color = Cyan,
-                        startAngle = 0f,
-                        sweepAngle = 75f,
-                        useCenter = false,
-                        topLeft = androidx.compose.ui.geometry.Offset(
-                            center.x - radius - 8.dp.toPx(),
-                            center.y - radius - 8.dp.toPx()
-                        ),
-                        size = androidx.compose.ui.geometry.Size(
-                            (radius + 8.dp.toPx()) * 2,
-                            (radius + 8.dp.toPx()) * 2
-                        ),
-                        style = Stroke(4.dp.toPx())
-                    )
-                }
-
-                rotate(reverseRotation, center) {
-                    drawCircle(
-                        color = Blue.copy(alpha = 0.8f),
-                        radius = radius * 0.76f,
-                        style = Stroke(
-                            width = 2.dp.toPx(),
-                            pathEffect = PathEffect.dashPathEffect(
-                                floatArrayOf(12f, 10f)
-                            )
-                        )
-                    )
-                }
-
-                drawCircle(
-                    color = Cyan.copy(alpha = 0.18f),
-                    radius = radius * 0.55f * pulse
-                )
-
-                drawCircle(
-                    color = Cyan.copy(alpha = 0.9f),
-                    radius = radius * 0.48f,
-                    style = Stroke(2.dp.toPx())
-                )
-            }
-
+    MaterialTheme(colorScheme = darkColorScheme(primary = Cyan, background = Background, surface = Panel)) {
+        Surface(modifier = Modifier.fillMaxSize(), color = Background) {
             Column(
+                modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(22.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                Spacer(Modifier.height(24.dp))
+                Text("K A Y R A", color = Cyan, fontSize = 30.sp, fontWeight = FontWeight.Bold, letterSpacing = 7.sp)
+                Text("PERSONAL AI SYSTEM", color = Color(0xFF7D9DB4), fontSize = 10.sp, letterSpacing = 3.sp)
+                Spacer(Modifier.height(28.dp))
                 Box(
-                    modifier = Modifier
-                        .size(125.dp)
-                        .background(
-                            Brush.radialGradient(
-                                listOf(
-                                    Color(0xFF174B75),
-                                    Color(0xFF09243F),
-                                    Background
-                                )
-                            ),
-                            CircleShape
-                        ),
+                    modifier = Modifier.size(210.dp).background(
+                        Brush.radialGradient(listOf(Color(0xFF123D59), Color(0xFF081526), Background)), CircleShape
+                    ),
                     contentAlignment = Alignment.Center
                 ) {
+                    Canvas(Modifier.size(180.dp)) {
+                        val center = Offset(size.width / 2, size.height / 2)
+                        drawCircle(Cyan.copy(alpha = 0.15f), radius = size.minDimension * 0.46f)
+                        drawCircle(Cyan.copy(alpha = 0.55f), radius = size.minDimension * 0.39f, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
+                        drawCircle(Cyan.copy(alpha = 0.25f), radius = size.minDimension * 0.29f, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx()))
+                        val bars = 48
+                        for (i in 0 until bars) {
+                            val angle = (i * 360f / bars) * (Math.PI / 180.0)
+                            val inner = size.minDimension * 0.34f
+                            val outer = inner + if (listening) (8 + (i % 5) * 2).dp.toPx() else (3 + (i % 3) * 2).dp.toPx()
+                            drawLine(Cyan.copy(alpha = if (listening) 0.95f else 0.55f),
+                                Offset(center.x + kotlin.math.cos(angle).toFloat() * inner, center.y + kotlin.math.sin(angle).toFloat() * inner),
+                                Offset(center.x + kotlin.math.cos(angle).toFloat() * outer, center.y + kotlin.math.sin(angle).toFloat() * outer),
+                                strokeWidth = 2.dp.toPx())
+                        }
+                    }
+                    Text("K", color = WhiteBlue, fontSize = 62.sp, fontWeight = FontWeight.ExtraLight)
+                }
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    when { listening -> "SENİ DİNLİYORUM"; thinking -> "DÜŞÜNÜYORUM"; else -> "SİSTEM HAZIR" },
+                    color = Cyan, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp
+                )
+                Spacer(Modifier.height(26.dp))
+                InfoPanel("INPUT / SESLİ KOMUT", recognizedText)
+                Spacer(Modifier.height(12.dp))
+                InfoPanel("KAYRA / YANIT", responseText)
+                Spacer(Modifier.height(22.dp))
+                Button(
+                    onClick = onMicClick,
+                    modifier = Modifier.fillMaxWidth().height(58.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Cyan, contentColor = Background)
+                ) {
+                    Text(if (listening) "DİNLEMEYİ DURDUR" else "◉  KAYRA'YI ETKİNLEŞTİR", fontSize = 14.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.sp)
+                }
+                Spacer(Modifier.height(12.dp))
+                OutlinedButton(
+                    onClick = onWakeClick,
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Cyan)
+                ) {
                     Text(
-                        "K",
-                        color = Cyan,
-                        fontSize = 66.sp,
-                        fontWeight = FontWeight.Light
+                        if (wakeEnabled) "HEY KAYRA BEKLEME MODUNU KAPAT"
+                        else "◉  HEY KAYRA MODUNU AÇ",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.6.sp
                     )
                 }
-
                 Spacer(Modifier.height(8.dp))
-
                 Text(
-                    if (listening) "LISTENING" else "KAYRA CORE",
-                    color = Cyan,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 3.sp
+                    if (wakeEnabled) "UYANDIRMA KELİMESİ AKTİF • SERVİS ÇALIŞIYOR"
+                    else "Ekran kapalıyken uyandırmak için Hey Kayra modunu aç",
+                    color = Color(0xFF7D9DB4),
+                    fontSize = 9.sp,
+                    textAlign = TextAlign.Center
                 )
+                Spacer(Modifier.height(22.dp))
+                Text("VOICE  •  MEMORY  •  ARTIFICIAL INTELLIGENCE", color = Color(0xFF607C91), fontSize = 9.sp, letterSpacing = 1.sp, textAlign = TextAlign.Center)
+                Spacer(Modifier.height(16.dp))
             }
         }
-
-        Text(
-            status,
-            color = Cyan,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 2.sp
-        )
-
-        Spacer(Modifier.height(14.dp))
-
-        Canvas(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(45.dp)
-        ) {
-            val barCount = 28
-            val barWidth = 4.dp.toPx()
-            val gap = 4.dp.toPx()
-            val totalWidth = barCount * (barWidth + gap)
-            val startX = (size.width - totalWidth) / 2f
-
-            for (i in 0 until barCount) {
-                val factor = if (listening) {
-                    0.2f + ((i * 7) % 10) / 10f * wave
-                } else {
-                    0.12f
-                }
-
-                val barHeight = size.height * factor
-                val x = startX + i * (barWidth + gap)
-
-                drawLine(
-                    color = Cyan.copy(
-                        alpha = if (listening) 0.9f else 0.35f
-                    ),
-                    start = androidx.compose.ui.geometry.Offset(
-                        x,
-                        (size.height - barHeight) / 2f
-                    ),
-                    end = androidx.compose.ui.geometry.Offset(
-                        x,
-                        (size.height + barHeight) / 2f
-                    ),
-                    strokeWidth = barWidth,
-                    cap = StrokeCap.Round
-                )
-            }
-        }
-
-        Spacer(Modifier.height(20.dp))
-
-        InfoPanel(
-            "INPUT / SESLİ KOMUT",
-            recognizedText
-        )
-
-        Spacer(Modifier.height(12.dp))
-
-        InfoPanel(
-            "KAYRA / YANIT",
-            responseText
-        )
-
-        Spacer(Modifier.height(20.dp))
-
-        Button(
-            onClick = onMicClick,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(60.dp),
-            shape = RoundedCornerShape(16.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = Cyan,
-                contentColor = Background
-            )
-        ) {
-            Text(
-                if (listening) "DİNLENİYOR..."
-                else "◉  KAYRA'YI ETKİNLEŞTİR",
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp
-            )
-        }
-
-        Spacer(Modifier.height(25.dp))
-
-        Text(
-            "KAYRA ARTIFICIAL INTELLIGENCE",
-            color = Color.Gray,
-            fontSize = 9.sp,
-            letterSpacing = 2.sp
-        )
-
-        Spacer(Modifier.height(20.dp))
     }
 }
 
 @Composable
-fun StatusItem(title: String, value: String) {
+private fun InfoPanel(title: String, value: String) {
     Column(
-        modifier = Modifier
-            .background(
-                Panel,
-                RoundedCornerShape(10.dp)
-            )
-            .padding(
-                horizontal = 12.dp,
-                vertical = 10.dp
-            ),
-        horizontalAlignment = Alignment.CenterHorizontally
+        modifier = Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(14.dp)).padding(16.dp)
     ) {
-        Text(
-            title,
-            color = Color.Gray,
-            fontSize = 9.sp,
-            letterSpacing = 1.sp
-        )
-
-        Spacer(Modifier.height(4.dp))
-
-        Text(
-            value,
-            color = Cyan,
-            fontSize = 10.sp,
-            fontWeight = FontWeight.Bold
-        )
-    }
-}
-
-@Composable
-fun InfoPanel(title: String, value: String) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                Panel,
-                RoundedCornerShape(14.dp)
-            )
-            .padding(16.dp)
-    ) {
-        Text(
-            text = title,
-            color = Cyan,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold
-        )
-
+        Text(title, color = Cyan, fontSize = 11.sp, fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(8.dp))
-
-        Text(
-            text = value,
-            color = WhiteBlue,
-            fontSize = 14.sp
-        )
+        Text(value, color = WhiteBlue, fontSize = 14.sp, lineHeight = 21.sp)
     }
 }
