@@ -89,13 +89,19 @@ private fun buildMemoryPrompt(message: String): String {
     }
 
     return """
+        Sen KAYRA isimli kişisel asistansın.
+
+        Kullanıcı hakkında kalıcı hafızanda bulunan bilgiler:
+        ${getSavedFacts()}
+
         Önceki konuşmalarımız:
         $context
 
         Yeni mesaj:
         $message
 
-        Önceki konuşmaları dikkate alarak cevap ver.
+        Hafızandaki bilgileri gerektiğinde kullan.
+        Bilmediğin şeyleri uydurma.
     """.trimIndent()
 }
     private lateinit var speechRecognizer: SpeechRecognizer
